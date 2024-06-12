@@ -13,6 +13,7 @@ Board_Width = Board_Height = 10
 tile_size = 200
 offset_coef = 0.05  # Offset between tiles will be size * coefficient
 border_size = 20
+# Customise here
 
 tile_offset = int(tile_size * offset_coef)
 total_board_width = tile_size * Board_Width + tile_offset * (Board_Width - 1) + border_size * 2
