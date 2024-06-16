@@ -9,7 +9,7 @@ imagename = "Example_Image.jpg"  # Just add a file and change this variable
 
 # HOW MANY CUTS (we have a great knife)
 # The size of the field (default 4x4) (doesn't work properly with unequal sides)
-Board_Width = Board_Height = 10
+Board_Width = Board_Height = 4
 tile_size = 200
 offset_coef = 0.05  # Offset between tiles will be size * coefficient
 border_size = 20

@@ -2,6 +2,9 @@
 
 It's a 15 puzzle with different sizes and images.
 
+An example how this looks:
+![GitHub Image](/Holo-game-of-fifteen/Game_screenshot.png)
+
 To play this you have to just download main file, place any image in the same folder,
 and change and change _**imagename**_ variable.
 
