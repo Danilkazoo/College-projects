@@ -3,6 +3,7 @@ import random
 
 window = Tk()
 window.geometry("1000x1000")
+
 bts = Button(text="1", command=lambda: comma(bts), font=("Comic Sans MS", 50))
 bts.place(x=0, y=0, relheight=1, relwidth=1)
 
@@ -19,22 +20,24 @@ def comma(button: Button):
 	
 	font = ("Comic Sans MS", width // 2)
 	
-	col = gen_col()
-	eeeee = Button(text=text, command=lambda: comma(eeeee), justify='center', height=height, width=width, font=font,
-	               bg=col)
-	eeeee.place(x=x, y=y, height=height, width=width)
-	col = gen_col()
-	b = Button(text=text, command=lambda: comma(b), justify='center', height=height, width=width, font=font, bg=col)
+	a = Button(text=text, command=lambda: comma(a), justify='center', height=height, width=width, font=font,
+	           bg=gen_col())
+	a.place(x=x, y=y, height=height, width=width)
+	
+	b = Button(text=text, command=lambda: comma(b), justify='center', height=height, width=width, font=font,
+	           bg=gen_col())
 	b.place(x=x + width, y=y, height=height, width=width)
-	col = gen_col()
-	c = Button(text=text, command=lambda: comma(c), justify='center', height=height, width=width, font=font, bg=col)
+	
+	c = Button(text=text, command=lambda: comma(c), justify='center', height=height, width=width, font=font,
+	           bg=gen_col())
 	c.place(x=x, y=y + height, height=height, width=width)
-	col = gen_col()
-	d = Button(text=text, command=lambda: comma(d), justify='center', height=height, width=width, font=font, bg=col)
+	
+	d = Button(text=text, command=lambda: comma(d), justify='center', height=height, width=width, font=font,
+	           bg=gen_col())
 	d.place(x=x + width, y=y + height, height=height, width=width)
 
 
-def a(weight=4):
+def auto(weight=4):
 	c = window.winfo_children()
 	
 	ma = max((int(i["text"]) for i in c))
@@ -43,10 +46,11 @@ def a(weight=4):
 	
 	comma(b)
 	
-	# Тут задержка можешь творить хаос
-	window.after(500, a)
+	window.after(delay, auto)
 
 
-window.after(500, a)
+delay = -1  # Delay between auto clicks
 
+if delay > 0:
+	window.after(delay, auto)
 window.mainloop()
