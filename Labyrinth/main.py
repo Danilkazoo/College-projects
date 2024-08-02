@@ -1,321 +1,195 @@
 import pygame
-import random
 from pygame.locals import (
 	K_w, K_s, K_a, K_d,
 	K_ESCAPE, QUIT,
 	K_LEFT, K_RIGHT, K_UP, K_DOWN)
 
-
-def minmax(num, min, max):
-	if num < min:
-		return min
-	if num > max:
-		return max
-	return num
+import generators
 
 
-def generate_field(fieldY, fieldX, finishes=1):
-	field = []
-	for y in range(fieldY):
-		field.append([2])
-		for x in range(fieldX - 2):
-			if y == 0 or y == fieldY - 1:
-				field[y].append(2)
-			else:
-				field[y].append(1)
-		field[y].append(2)
+def start_game(field_width, field_height, block_size, exits):
+	def minmax(num, min, max):
+		if num < min:
+			return min
+		if num > max:
+			return max
+		return num
 	
-	# Random start and finish
-	startX, startY = random.randint(1, fieldX - 2), random.randint(1, fieldY - 2)
-	if random.randint(0, 1):
-		endX, endY = random.choice((0, fieldX - 1)), random.randint(1, fieldY - 2)
-	else:
-		endX, endY = random.choice((0, fieldX - 2)), random.randint(1, fieldY - 2)
-	
-	# ШАНСЫ МОЖНО УДАЛИТЬ, ОНИ ЭКСПЕРИМЕНТ, Я ИГРАЮ В НОТЧА
-	def generate_path(pointX, pointY, destX, destY, *sides, pathlen=1):
-		nonlocal field, next_gen
-		possible_paths = []
-		if 'left' in sides or 'all' in sides:
-			possible_paths.append([pointX - 1, pointY, 'left'])
-		if 'right' in sides or 'all' in sides:
-			possible_paths.append([pointX + 1, pointY, 'right'])
-		if 'up' in sides or 'all' in sides:
-			possible_paths.append([pointX, pointY + 1, 'up'])
-		if 'down' in sides or 'all' in sides:
-			possible_paths.append([pointX, pointY - 1, 'down'])
+	class Player(pygame.sprite.Sprite):
+		def __init__(self, size, spawn_x, spawn_y, player_color):
+			super(Player, self).__init__()
+			self.surf = pygame.Surface((size, size))
+			self.surf.fill(player_color)
+			self.rect = self.surf.get_rect()
+			self.X = spawn_x
+			self.Y = spawn_y
+			self.size = size
 		
-		# Checks
-		i = 0
-		while i < len(possible_paths):
-			pathX, pathY, side = possible_paths[i]
-			
-			# Убираю все углы и уже пустые места
-			if field[pathY][pathX] == 0 or field[pathY][pathX] == 2:
-				possible_paths.pop(i)
-				continue
-			
-			close_walls = []
-			if side == 'left':
-				close_walls.append(field[pathY][pathX - 1])
-				close_walls.append(field[pathY + 1][pathX - 1])
-				close_walls.append(field[pathY - 1][pathX - 1])
-				close_walls.append(field[pathY + 1][pathX])
-				close_walls.append(field[pathY - 1][pathX])
-			if side == 'right':
-				close_walls.append(field[pathY][pathX + 1])
-				close_walls.append(field[pathY + 1][pathX + 1])
-				close_walls.append(field[pathY - 1][pathX + 1])
-				close_walls.append(field[pathY + 1][pathX])
-				close_walls.append(field[pathY - 1][pathX])
-			if side == 'up':
-				close_walls.append(field[pathY + 1][pathX - 1])
-				close_walls.append(field[pathY + 1][pathX + 1])
-				close_walls.append(field[pathY + 1][pathX])
-				close_walls.append(field[pathY][pathX + 1])
-				close_walls.append(field[pathY][pathX - 1])
-			if side == 'down':
-				close_walls.append(field[pathY - 1][pathX - 1])
-				close_walls.append(field[pathY - 1][pathX + 1])
-				close_walls.append(field[pathY - 1][pathX])
-				close_walls.append(field[pathY][pathX + 1])
-				close_walls.append(field[pathY][pathX - 1])
-			
-			if not all(close_walls):
-				possible_paths.pop(i)
-				continue
-			
-			i += 1
-		
-		# Если тупик - тупик
-		if not possible_paths:
-			return
-		
-		# Так оно будет рандомным, иначе пути получаются прямыми
-		random.shuffle(possible_paths)
-		
-		for pathX, pathY, l in possible_paths:
-			field[pathY][pathX] = 0
-			next_gen.insert(0, f"generate_path({pathX}, {pathY}, {destX}, {destY}, 'all', pathlen={pathlen + 1})")
-			break
-		next_gen.insert(0, f"generate_path({pointX}, {pointY}, {destX}, {destY}, 'all', pathlen={pathlen})")
-		
-		'''for pathX, pathY, l in possible_paths:
-			field[pathY][pathX] = 0
-			generate_path(pathX, pathY, destX, destY, 'all', pathlen=pathlen + 1)'''
-	
-	def gen_end(endX, endY):
-		nonlocal field
-		
-		if endX == 0:
-			side = 'left'
-		elif endX == fieldX - 1:
-			side = 'right'
-		elif endY == 0:
-			side = 'down'
-		else:
-			side = 'up'
-		
-		mined = list((endX, endY))
-		
-		while True:
-			if side == 'left':
-				mined[0] += 1
-			elif side == 'right':
-				mined[0] -= 1
-			elif side == 'up':
-				mined[1] -= 1
-			else:
-				mined[1] += 1
-			
-			if field[mined[1]][mined[0]] == 0:
-				return
-			else:
-				field[mined[1]][mined[0]] = 0
-	
-	field[startY][startX] = 0
-	field[endY][endX] = 0
-	
-	next_gen = ["generate_path(startX, startY, endX, endY, 'all')"]
-	i = 0
-	ten_percent = fieldY * fieldX // 10
-	
-	while next_gen:
-		exec(next_gen[0])
-		next_gen.pop(0)
-		# Если менять рандом, то в теории будет творится бОльший хаос
-		if len(next_gen) < 2000:
-			if random.randint(1, 20) == 1:
-				random.shuffle(next_gen)
-		i += 1
-		if i % ten_percent == 0:
-			print(i)
-	
-	gen_end(endX, endY)
-	
-	# Just for return
-	for y in range(fieldY):
-		field[y][0] = 1
-		field[y][fieldX - 1] = 1
-	for x in range(fieldX):
-		field[0][x] = 1
-		field[fieldY - 1][x] = 1
-	field[endY][endX] = 2
-	
-	return field, startX, startY
-
-
-class Player(pygame.sprite.Sprite):
-	def __init__(self, size, px, py):
-		super(Player, self).__init__()
-		self.surf = pygame.Surface((size, size))
-		self.surf.fill((255, 0, 0))
-		self.rect = self.surf.get_rect()
-		self.X = px
-		self.Y = py
-	
-	def check(self, X, Y):
-		global field, fieldX, fieldY
-		
-		if field[Y][X] == 2:
-			global win
-			win()
+		def check_move(self, X, Y):
+			if field[Y][X] == 1:
+				return False
 			return True
 		
-		if field[Y][X] == 1:
-			return False
-		return True
+		def move(self, pressed_keys):
+			oldX, oldY = self.X, self.Y
+			newX, newY = self.X, self.Y
+			if pressed_keys[K_w] or pressed_keys[K_UP]:
+				newY -= 1
+			if pressed_keys[K_s] or pressed_keys[K_DOWN]:
+				newY += 1
+			if pressed_keys[K_d] or pressed_keys[K_RIGHT]:
+				newX += 1
+			if pressed_keys[K_a] or pressed_keys[K_LEFT]:
+				newX -= 1
+			
+			if self.check_move(newX, oldY):
+				self.X = newX
+			if self.check_move(self.X, newY):
+				self.Y = newY
+			
+			return oldX, oldY
 	
-	def move(self, pressed_keys):
-		oldX, oldY = self.X, self.Y
-		newX, newY = self.X, self.Y
-		if pressed_keys[K_w] or pressed_keys[K_UP]:
-			newY -= 1
-		if pressed_keys[K_s] or pressed_keys[K_DOWN]:
-			newY += 1
-		if pressed_keys[K_d] or pressed_keys[K_RIGHT]:
-			newX += 1
-		if pressed_keys[K_a] or pressed_keys[K_LEFT]:
-			newX -= 1
+	def win():
+		nonlocal screen, running, world
+		img = pygame.image.load(r"603e0413c81f611898488e6c2f736864.jpeg").convert()
+		width, height = img.get_size()
+		screen = pygame.display.set_mode((width, height))
+		world.set_alpha(0)
 		
-		if self.check(newX, newY):
-			self.X, self.Y = newX, newY
-		return oldX, oldY
-
-
-def win():
-	global screen, daenda, running, world
-	imp = pygame.image.load(r"603e0413c81f611898488e6c2f736864.jpeg").convert()
-	width, height = imp.get_size()
-	screen = pygame.display.set_mode((width, height))
-	world.set_alpha(0)
+		screen.blit(img, (0, 0))
+		pygame.display.flip()
+		
+		while True:
+			pressed_keys = pygame.key.get_pressed()
+			for event in pygame.event.get():
+				if event.type == QUIT:
+					return
+			
+			if pressed_keys[K_ESCAPE]:
+				return
 	
-	screen.blit(imp, (0, 0))
-	daenda = True
-	running = False
-
-
-def calc_camera(pX, pY, square_size, camera_size):
-	cameraX = pX * square_size - camera_size * square_size
-	cameraY = pY * square_size - camera_size * square_size
+	def calc_camera(player, block_size, camera_width, camera_height):
+		cameraX = (player.X * block_size) - (camera_width * block_size / 2)
+		cameraY = (player.Y * block_size) - (camera_height * block_size / 2)
+		
+		cameraX = minmax(cameraX, 0, max_cam_x)
+		cameraY = minmax(cameraY, 0, max_cam_y + block_size)
+		
+		return -cameraX, -cameraY
 	
-	if cameraX < 0:
-		cameraX = 0
-	if cameraY < 0:
-		cameraY = 0
+	# Теперь игрок не спавнится как надо, я должен это пофиксить, это после ограничения шафла
+	def display_lab(screen, world, old_X, old_Y, camera_pos):
+		pygame.draw.rect(world, (255, 255, 255),
+		                 pygame.Rect(old_X * block_size, old_Y * block_size, block_size, block_size))
+		world.blit(player.surf, (player.X * block_size, player.Y * block_size))
+		
+		screen.blit(world, camera_pos)
+		pygame.display.flip()
 	
-	return -cameraX, -cameraY
-
-
-# Теперь игрок не спавнится как надо, я должен это пофиксить, это после ограничения шафла
-def display_lab(screen, world, old_X, old_Y):
-	pygame.draw.rect(world, (255, 255, 255),
-	                 pygame.Rect(old_X * block_size, old_Y * block_size, block_size, block_size))
-	world.blit(PP.surf, (PP.X * block_size, PP.Y * block_size))
+	pygame.init()
+	pygame.display.set_caption("AAAAAAAA")
+	screen_width, screen_height = pygame.display.get_desktop_sizes()[0]
 	
+	field, spawn_x, spawn_y = generators.generate_field_1(field_width, field_height, exits)
+	
+	# In short, you choose a camera height, but it changes accordingly to the screen and field size
+	camera_width, camera_height = 10000, 10000
+	window_width = minmax(camera_width * block_size, 100, screen_width - 100)
+	window_height = minmax(camera_height * block_size, 100, screen_height - 100)
+	camera_width = minmax(camera_width, 1, window_width // block_size)
+	camera_height = minmax(camera_height, 1, window_height // block_size)
+	
+	if camera_width > field_width:
+		if camera_width * block_size > window_width:
+			max_cam_x = (field_width * block_size) - window_width
+		else:
+			max_cam_x = 0
+	else:
+		max_cam_x = (field_width - camera_width) * block_size
+	if camera_height > field_height:
+		if camera_height * block_size > window_height:
+			max_cam_y = (field_height * block_size) - window_height
+		else:
+			max_cam_y = 0
+	else:
+		max_cam_y = (field_height - camera_height) * block_size
+	print(max_cam_x, max_cam_y)
+	
+	player_color = (255, 0, 0)
+	bg_color = (255, 255, 255)
+	wall_color = (0, 0, 0)
+	exit_color = (150, 150, 255)
+	
+	screen = pygame.display.set_mode((window_width, window_height))
+	screen.fill(wall_color)
+	
+	world = pygame.Surface((len(field[0]) * block_size, len(field) * block_size))
+	world.fill(bg_color)
+	
+	player = Player(block_size, spawn_x, spawn_y, player_color)
+	world.blit(player.surf, (player.X * block_size, player.Y * block_size))
+	
+	clock = pygame.time.Clock()
+	
+	# Draw the labyrinth
+	for y, row in enumerate(field):
+		for x, cell in enumerate(row):
+			if cell == 1:
+				pygame.draw.rect(world, wall_color, pygame.Rect(x * block_size, y * block_size, block_size, block_size))
+			elif cell == 2:
+				pygame.draw.rect(world, exit_color, pygame.Rect(x * block_size, y * block_size, block_size, block_size))
+	
+	camera_pos = calc_camera(player, block_size, camera_width, camera_height)
 	screen.blit(world, camera_pos)
 	pygame.display.flip()
-
-
-fieldY, fieldX = 20, 20
-field, px, py = generate_field(fieldY, fieldX)
-print('Field generated')
-
-pygame.init()
-wX, wY = pygame.display.get_desktop_sizes()[0]
-block_size = 20
-camera_size = 10
-screen = pygame.display.set_mode(
-	(minmax(camera_size * block_size * 3, 100, wX - 100), minmax(camera_size * block_size * 3, 100, wY - 100)),
-	pygame.RESIZABLE)
-pygame.display.set_caption("AAAAAAAA")
-clock = pygame.time.Clock()
-
-PP = Player(block_size, px, py)
-move_ticks = 0
-move_delay = 10
-wanna_move = False
-last_move = ...
-
-running = True
-daenda = False
-camera_pos = calc_camera(PP.X, PP.Y, block_size, camera_size)
-
-world = pygame.Surface((len(field[0]) * block_size, len(field) * block_size))
-screen.fill((0, 0, 0))
-world.fill((255, 255, 255))
-
-todraw = []
-for y, row in enumerate(field):
-	for x, cell in enumerate(row):
-		if cell == 1:
-			todraw.append((pygame.Rect(x * block_size, y * block_size, block_size, block_size), (0, 0, 0)))
-		elif cell == 2:
-			todraw.append((pygame.Rect(x * block_size, y * block_size, block_size, block_size), (150, 150, 255)))
-
-world.blit(PP.surf, (PP.X * block_size, PP.Y * block_size))
-for sq in todraw:
-	pygame.draw.rect(world, sq[1], sq[0])
-
-screen.blit(world, camera_pos)
-pygame.display.flip()
-while running:
-	pressed_keys = pygame.key.get_pressed()
-	for event in pygame.event.get():
-		if event.type == QUIT:
-			running = False
 	
-	if pressed_keys[K_ESCAPE]:
-		running = False
+	last_move_tick = 0
+	move_delay = 10  # in ticks (120 per second)
 	
-	if any(pressed_keys) and move_ticks > move_delay:
-		wanna_move = True
-		last_move = pressed_keys
+	running = True
+	while running:
+		pressed_keys = pygame.key.get_pressed()
+		for event in pygame.event.get():
+			if event.type == QUIT:
+				running = False
+				break
+		
+		if pressed_keys[K_ESCAPE]:
+			break
+		
+		if any(pressed_keys) and last_move_tick > move_delay:
+			if last_move_tick > move_delay:
+				oldX, oldY = player.move(pressed_keys)
+				if player.X == oldX and player.Y == oldY:
+					continue
+				
+				if field[player.Y][player.X] == 2:
+					win()
+					break
+				
+				camera_pos = calc_camera(player, block_size, camera_width, camera_height)
+				display_lab(screen, world, oldX, oldY, camera_pos)
+				last_move_tick = -1
+		
+		last_move_tick += 1
+		clock.tick(120)
 	
-	# Мы тут двигаемся йопта
-	if wanna_move:
-		if move_ticks > move_delay:
-			oldX, oldY = PP.move(last_move)
-			move_ticks = 0
-			wanna_move = False
-			camera_pos = calc_camera(PP.X, PP.Y, block_size, camera_size)
-			
-			display_lab(screen, world, oldX, oldY)
-	
-	move_ticks += 1
-	clock.tick(120)
+	pygame.quit()
 
-running = True
-while running:
-	pressed_keys = pygame.key.get_pressed()
-	for event in pygame.event.get():
-		if event.type == QUIT:
-			running = False
-	
-	if pressed_keys[K_ESCAPE]:
-		running = False
 
-pygame.quit()
+if __name__ == '__main__':
+	import time
+	
+	test_sizes = (
+		# (5, 5, 50, 1), (10, 10, 50, 1), (20, 20, 50, 1), (50, 50, 20, 1), (100, 100, 10, 1), (500, 500, 10, 5),
+		# (1000, 1000, 10, 20), (1000, 1000, 5, 20), (1000, 1000, 3, 20), (1000, 1000, 2, 20), (1000, 1000, 1, 20),
+		(100, 5, 20, 3), (100, 10, 20, 3), (5, 100, 20, 3), (10, 100, 20, 3), (20, 1000, 5, 10), (1000, 20, 2, 10))
+	
+	for width, height, tile_size, ends in test_sizes:
+		print(f"\nLabyrinth {width = } {height = } {tile_size = } {ends = }")
+		start = time.time()
+		start_game(width, height, tile_size, ends)
+		print("Speedrun time - ", time.time() - start)
 
 # Надо добавить разветвления, тогда можно добавить максимальную длинну пути - тогда я смогу отдельно создавать фейки ака "maxlen = 10", и длинна этого фейка будет не больше 10
 # Либо не надо, потому что пока я убирал гигантские рекурсии дабы сделать гигантский лабиринт, я почти случайно добавил хорошую генерацию...
@@ -330,3 +204,20 @@ pygame.quit()
 # Игрок вроде всегда спавнится, но камера иногда за ним тупо не следует...
 
 # Разные алгоритмы, их скорость, и, оптимизация моего алгоритма - на потом, гы
+# Нормальное передвижение игрока - проверять отдельно движение по X и по Y, и если что скользить по стене
+# Ну и камера пусть не выходит за границы и справа тоже...
+# анимация генерации
+# можно конечно по фану добавить выбор сложности / разные уровни, где игра постепенно становится сложнее
+# может ещё и добавить бафы / дебафы во время игры, по типу размера камеры, или временного бафа на фулл карту камеру
+# в теории можно даже делать zoom in эффект, тупо увеличивая размер квадратов ? игра всё равно должна показывать игрока
+# хотя тогда надо оставлять игрока нормально относительно от камеры
+# фикс камеры, которая изначально лаганная (может тупо обновлять в первом кадре)
+# скорость передвижения и delay между шагами должен быть в классе игрока
+# просто для угара пусть будет генериться лабиринт, потом его копируешь в 4 ровные копии (или отзеркаленные), и туда копируешь игрока, ну и пусть будет всё видно
+# сглаживание камеры ?
+# wall thickness
+# иногда выход спавнится не в стене, и недоступен
+# добавить новые генераторы, например осуществить ту фигню с pathlen, которая будет иногда создавать тупо прямые линии, чтобы генерация была чуток более квадратной
+# также как и несколько финишей, например даже финиш не в конце, можно генерить лабиринт в виде спирали, где финиш в центре например...
+# ну и уже известные алгоритмы генерации тоже реализовать весело
+# также можно повеселиться и сделать как другие версии генерации например такую которая делает большой приоритет на первых эллементах, или наоборот на последних
