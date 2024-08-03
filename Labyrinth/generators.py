@@ -148,8 +148,128 @@ def generate_field_1(field_width: int, field_height: int, exits: int = 1) -> (li
 	return field, startX, startY
 
 
+def generate_field_original(fieldX: int, fieldY: int, exits: int = 1) -> (list, int, int):
+	"""
+	Squiggly generation, not that hard to predict, paths change direction a lot. Also kinda cool for strange sizes.
+	O(n^2), but very random, so the bigger the input - the longer it takes, realistically O(n^3). 40s for 1024x1024
+	:return: A field, start X and Y.
+	"""
+	
+	def get_path(x, y, side):
+		if side == 'left':
+			ret_x, ret_y = x - 1, y
+			check_x = (-1, 0)
+			check_y = (-1, 1)
+		elif side == 'right':
+			ret_x, ret_y = x + 1, y
+			check_x = (0, 1)
+			check_y = (-1, 1)
+		elif side == 'up':
+			ret_x, ret_y = x, y - 1
+			check_x = (-1, 1)
+			check_y = (-1, 0)
+		elif side == 'down':
+			ret_x, ret_y = x, y + 1
+			check_x = (-1, 1)
+			check_y = (0, 1)
+		else:
+			return False
+		
+		if field[ret_y][ret_x] != 1:
+			return False
+		
+		for xd in range(check_x[0], check_x[1] + 1):
+			for yd in range(check_y[0], check_y[1] + 1):
+				if field[yd + ret_y][xd + ret_x] == 0:
+					return False
+		return ret_x, ret_y
+	
+	def generate_path_new(pointX, pointY, *sides):
+		nonlocal field, next_gen
+		if 'all' in sides:
+			sides = ["left", "right", "up", "down"]
+		
+		random.shuffle(sides)
+		paths = []
+		for side in sides:
+			pathcords = get_path(pointX, pointY, side)
+			if pathcords:
+				pathX, pathY = pathcords
+				paths.append((pathX, pathY))
+		
+		# Dead ends are the ends that are dead
+		if not paths:
+			return
+		
+		for pathX, pathY in paths:
+			field[pathY][pathX] = 0
+			next_gen.insert(0, lambda: generate_path_new(pathX, pathY, 'all'))
+			break
+		next_gen.insert(0, lambda: generate_path_new(pointX, pointY, 'all'))
+	
+	def gen_end(endX, endY):
+		nonlocal field
+		
+		if endX == 0:
+			move = (1, 0)
+			to_mine = fieldY - 2
+		elif endX == fieldY - 1:
+			move = (-1, 0)
+			to_mine = fieldY - 2
+		elif endY == 0:
+			move = (0, 1)
+			to_mine = fieldX - 2
+		else:
+			move = (0, -1)
+			to_mine = fieldX - 2
+		
+		for _ in range(to_mine):
+			endX += move[0]
+			endY += move[1]
+			field[endY][endX] = 0
+			
+			if field[endY][endX] == 0 or field[endY + move[0]][endX + move[1]] == 0 or field[endY - move[0]][
+				endX - move[1]] == 0:
+				return
+	
+	field = _get_starting_box(fieldX, fieldY)
+	
+	startX, startY = random.randint(1, fieldX - 2), random.randint(1, fieldY - 2)
+	
+	finishes = _get_random_exits(fieldX, fieldY, exits)
+	
+	field[startY][startX] = 0
+	for endX, endY in finishes:
+		field[endY][endX] = 3
+	
+	next_gen = [lambda: generate_path_new(startX, startY, 'all')]
+	
+	shuffle_threshold = fieldY * fieldX // 10
+	while next_gen:
+		next_gen[0]()
+		next_gen.pop(0)
+		
+		if len(next_gen) > shuffle_threshold and random.randint(1, 20) == 1:
+			random.shuffle(next_gen)
+	
+	for endX, endY in finishes:
+		gen_end(endX, endY)
+	
+	# Just for return
+	for y in range(fieldY):
+		field[y][0] = 1
+		field[y][fieldX - 1] = 1
+	for x in range(fieldX):
+		field[0][x] = 1
+		field[fieldY - 1][x] = 1
+	for endX, endY in finishes:
+		field[endY][endX] = 2
+	
+	return field, startX, startY
+
+
 if __name__ == '__main__':
-	tries = 10
+	tries = 1
 	
 	size = 4
 	while size < 1000:
@@ -158,7 +278,7 @@ if __name__ == '__main__':
 		times = []
 		for _ in range(tries):
 			s = time.time()
-			generate_field_1(width, height)
+			generate_field_original(width, height)
 			times.append(time.time() - s)
 		
 		print(size, times)
