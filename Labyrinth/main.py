@@ -77,7 +77,6 @@ def start_game(field_width, field_height, block_size, exits):
 		
 		return -cameraX, -cameraY
 	
-	# Теперь игрок не спавнится как надо, я должен это пофиксить, это после ограничения шафла
 	def display_lab(screen, world, old_X, old_Y, camera_pos):
 		pygame.draw.rect(world, (255, 255, 255),
 		                 pygame.Rect(old_X * block_size, old_Y * block_size, block_size, block_size))
@@ -90,10 +89,13 @@ def start_game(field_width, field_height, block_size, exits):
 	pygame.display.set_caption("AAAAAAAA")
 	screen_width, screen_height = pygame.display.get_desktop_sizes()[0]
 	
-	field, spawn_x, spawn_y = generators.generate_field_custom(field_width, field_height, exits,
-	                                                           randomised_node_percentage=10)
+	# field, spawn_x, spawn_y = generators.generate_field_chaos(field_width, field_height, wall_width=1, path_width=1,
+	#                                                           min_path_len=5, check_angle_step=15, max_path_len=15,
+	#                                                           centered_spawn=False, random_choice_chance=100,
+	#                                                           guaranteed_generations=50, dead_end_chance=50)
+	field, spawn_x, spawn_y = generators.generate_field_custom(field_width, field_height, random_node_chance=40, dead_end_chance=100)
 	
-	# In short, you choose a camera height, but it changes accordingly to the screen and field size
+	# In short, you choose a camera height, but it will be changed if it does not the screen height
 	camera_width, camera_height = 10000, 10000
 	window_width = minmax(camera_width * block_size, 100, screen_width - 100)
 	window_height = minmax(camera_height * block_size, 100, screen_height - 100)
