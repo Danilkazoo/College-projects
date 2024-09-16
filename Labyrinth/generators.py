@@ -199,7 +199,7 @@ def generator_precise(x: int, y: int, angle: float,
 def generate_field_original_optimised(field_width: int, field_height: int, exits: int = 1) -> (list, int, int):
 	"""
 	More blocky generation, has a lot of strange 1 block paths, kinda easy to predict on small sizes.
-	O(n^2), 4.9s for 1024x1024
+	4.9s for 1024x1024
 	:return: A field, start X and Y.
 	"""
 	
@@ -281,7 +281,7 @@ def generate_field_original_optimised(field_width: int, field_height: int, exits
 def generate_field_original(fieldX: int, fieldY: int, exits: int = 1) -> (list, int, int):
 	"""
 	Squiggly generation, not that hard to predict, paths change direction a lot. Also kinda cool for strange sizes.
-	O(n^2), but very random, so the bigger the input - the longer it takes, realistically O(n^3). 40s for 1024x1024
+	Very random generation speed, realistically O(n^3). 40s for 1024x1024
 	Works similarly to dfs.
 	:return: A field, start X and Y.
 	"""
@@ -376,12 +376,11 @@ def generate_field_original(fieldX: int, fieldY: int, exits: int = 1) -> (list, 
 
 def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
                           weight_left: int = 1, weight_right: int = 1, weight_up: int = 1,
-                          centered_spawn: bool = False,
-                          bfs: bool = False, random_node_chance: int = 0,
+                          centered_spawn: bool = False, bfs: bool = False, random_node_chance: int = 0,
                           dead_end_chance: int = 0, guaranteed_generations: int = 10) -> (list, int, int):
 	"""
 	Customisable, slower than generate_field_original_optimised, but can have a lot of variety.
-	O(n^2), 5.5s for 1024x1024 (way slower with random nodes - 10s)
+	5.5s for 1024x1024 (way slower with random nodes - 10s)
 	
 	Weights are relative to where we are generating - if left is the highest weight, the labyrinth will steer to the left.
 	There is no weight_down because we never generate down - it is backwards, and is always already used.
@@ -564,13 +563,13 @@ def generate_diagonal(field_width: int, field_height: int, exits: int = 1, steer
 	                             random_node_chance=random_node_percentage)
 
 
-def generate_field_chaos(field_width: int, field_height: int,
-                         wall_width: int = 1, path_width: int = 1,
-                         max_path_len: float = float("inf"), min_path_len: float = 1,
-                         check_angle_step: int = 90, ignore_tiles_radius: int = 3,
-                         exits: int = 1, centered_spawn: bool = False, bfs: bool = False,
-                         random_choice_chance: int = 0,
-                         dead_end_chance: int = 0, guaranteed_generations: int = 10) -> (list, int, int):
+def generate_field_vector(field_width: int, field_height: int,
+                          wall_width: int = 1, path_width: int = 1,
+                          max_path_len: float = float("inf"), min_path_len: float = 1,
+                          check_angle_step: int = 90, ignore_tiles_radius: int = 3,
+                          exits: int = 1, centered_spawn: bool = False, bfs: bool = False,
+                          random_choice_chance: int = 0,
+                          dead_end_chance: int = 0, guaranteed_generations: int = 10) -> (list, int, int):
 	"""
 	O(n^2), 5.6s for 128x128; 26s for 256x256
 	:param exits: How many exits are there, will correct impossible values.
@@ -759,9 +758,14 @@ if __name__ == '__main__':
 		print(sum(times) / len(times))
 		print()
 
+# TODO: aChaos generator still isn't complete and doesn't use wall and path width correctly
+# same with other parameters
 # TODO: use numpy to make labyrinths faster ? both here and in main.py
 # another optimisation - commands are stored in a list, it is O(n) for deletetion for random indexes, change it for self balancing binary tree ?
 # (test)
 
 # reversed chaos (just generate a chaos, then reverse walls and empty tiles, you will (probably) get a lot of unconnected rooms
 # just go through an array, when you see this room - connect it randomly with any already connected room.
+
+# instead of centered_spawn make it just a (spawn_x, spawn_y), so you can choose
+# add an ability to go diagonally ? and change the game, obviously
