@@ -5,12 +5,12 @@ pygame.init()
 pygame.display.set_caption('Holo is top')
 
 # Customise here
-imagename = "Example_Image.jpg"  # Just add a file and change this variable
+imagename = "Example_Image.jpg"  # What image to use in a game
 
 # HOW MANY CUTS (we have a great knife)
-# The size of the field (default 4x4) (doesn't work properly with unequal sides)
+# How many tiles in a field (default 4x4) (doesn't work properly with unequal sides)
 Board_Width = Board_Height = 4
-tile_size = 200
+tile_size = 200  # Automatically resizes if it doesn't fit
 offset_coef = 0.05  # Offset between tiles will be size * coefficient
 border_size = 20
 # Customise here
