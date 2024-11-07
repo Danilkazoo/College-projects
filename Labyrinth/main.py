@@ -128,7 +128,6 @@ def start_game():
 		total_world_width, total_world_height = field_width * block_size, field_height * block_size
 		world = pygame.Surface((total_world_width, total_world_height))
 		world.fill(wall_color)  # too lazy to optimise, so just draw entire labyrinth at once (will cause lags tho)
-		print(world.get_size(), block_size)
 		
 		draw_labyrinth(world, field, block_size, empty_tile_color, exit_color)
 		world.blit(player.surf, (player.X * block_size, player.Y * block_size))
@@ -314,8 +313,6 @@ def main_menu():
 	
 	# Submenus for generation and playing
 	submenu.menu_error_init()
-	optimised_original = submenu.original_labyrinth_optimised_submenu(menu_width, menu_height, exit_pygame,
-	                                                                  switch_to_main, play_generated_labyrinth)
 	original_submenu = submenu.original_labyrinth_submenu(menu_width, menu_height, exit_pygame,
 	                                                      switch_to_main, play_generated_labyrinth)
 	customisable_submenu = submenu.customisable_labyrinth_submenu(menu_width, menu_height, exit_pygame,
@@ -326,19 +323,17 @@ def main_menu():
 	labyrinth = namedtuple("labyrinth", "name generator description speed parameters click_command")
 	elements = [
 		labyrinth("Original", lambda: generators.generate_field_original(field_size, field_size),
-		          "Very slow, squiggly generation", "40s for 1024x1024", "3 parameters",
-		          click_command=lambda: select_menu._open(original_submenu)),
-		labyrinth("Optimised original", lambda: generators.generate_field_original_optimised(field_size, field_size),
 		          "Fast but simple, blocky generation", "5s for 1024x1024", "3 parameters",
-		          click_command=lambda: select_menu._open(optimised_original)),
+		          click_command=lambda: select_menu._open(original_submenu)),
 		labyrinth("Customisable", lambda: generators.generate_field_custom(field_size, field_size, weight_up=100,
-		                                                                   random_node_chance=40),
+		                                                                   random_node_chance=40,
+		                                                                   use_new_generator=False),
 		          "Slower than optimised", "5.5s for 1024x1024", "11 parameters",
 		          click_command=lambda: select_menu._open(customisable_submenu)),
 		labyrinth("Vector based",
 		          lambda: generators.generate_field_vector(field_size, field_size, random_choice_chance=100,
 		                                                   max_path_len=10),
-		          "Very slow but can look fun", "?s for 1024x1024", "14 parameters",
+		          "Very slow but can look fun", "16s for 256x256", "15 parameters",
 		          click_command=lambda: select_menu._open(vector_submenu))
 	]
 	elements_number = len(elements)
@@ -442,40 +437,3 @@ if __name__ == '__main__':
 			start_game()
 	
 	pygame.quit()
-
-# TODO: presets
-
-# анимация генерации
-# можно конечно по фану добавить выбор сложности / разные уровни, где игра постепенно становится сложнее
-# может ещё и добавить бафы / дебафы во время игры, по типу размера камеры, или временного бафа на фулл карту камеру
-# в теории можно даже делать zoom in эффект, тупо увеличивая размер квадратов ? игра всё равно должна показывать игрока
-# хотя тогда надо оставлять игрока нормально относительно от камеры
-# фикс камеры, которая изначально лаганная (может тупо обновлять в первом кадре)
-# скорость передвижения и delay между шагами должен быть в классе игрока
-# просто для угара пусть будет генериться лабиринт, потом его копируешь в 4 ровные копии (или отзеркаленные), и туда копируешь игрока, ну и пусть будет всё видно
-# сглаживание камеры ?
-# ну и уже известные алгоритмы генерации тоже реализовать весело
-
-# менюшка с разными лабиринтами, у каждого - его название, и превью, хачу по фану генерить превьюшки
-# ну и где-то снизу может быть мега стори режим значт, где и могут быть апгрейды всякие, можно даже пару предметов сделать типа ломания стен вокруг себя
-# в теории при наводке мышью превью можно увеличить тупо увеличив размер клеток в нём, над таким эффектом надо поработать
-
-# кстати об этом - да, после анимации генерации лабиринта сделай анимацию приближения или отдаления к персу, чтобы сразу понимать где я и кто я
-# а вот как нормально эту анимацию сделать - вопрос, типа надо отдалять от перса просто чтобы чётко знать где он
-
-# звучит как угарная идея сделать перса двигающимся не по матрице, а просто по полю пайгейма, и генерить лабиринт чисто на поле, проверяя коллизии
-# шутка в том что я же так могу генерить лабиринт тупо рандомными линиями, просто выбираешь рандомный угол, и туда генеришь лабиринт
-# важно только чтобы перс смог пройти в любую точку лабиринта
-# (такое можно сделать тупо создавая лабиринт разрешением в экран, где каждая стена - пиксель, перс может двигаться также...)
-# но для такого огромного лабиринта надо бы придумать более эффективный алгоритм, а то будет реальная жесть с генерацией в 5 часов
-# в общем, выбираешь рандомную сторону - рисуешь туда стену, она заканчивается либо когда достигает опр. длинны, либо доходит до другой стены
-# ну и наверное надо генерить стены не из прям каждого пикселя, лол, а ограничивая их расстоянием от других стен чтобы игрок мог пройти
-# так и генерация будет быстрее
-
-# если шизануться, то можно создавать лабиринт с кучей уровней, в рандомных тупиках создавая переход на другой уровень на тех же кордаъ
-# и, на каждом уровне делая то же самое. По факту получится 3-х мерный лабиринт, удачи такой пройти, лел... но, звучит как угарная идея
-# особенно для троллинга с лабиринтом в 100 уровней
-
-# куча инфы https://habr.com/ru/articles/445378/
-
-# заодно проверяй w_image есть на системе или нет, и если нет - то при победе просто пиши текст мол всмысле ГДЕ ХОЛО НЕ ПОНЯЛ

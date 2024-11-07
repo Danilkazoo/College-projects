@@ -1,5 +1,5 @@
-import random
 import math
+import random
 
 
 def _minmax(num, min, max):
@@ -27,10 +27,7 @@ def _get_random_exits(width: int, height: int, exits: int) -> set:
 	:return: A set of random finish cords - (x, y)
 	"""
 	
-	if exits > width * 2 + height * 2 - 8:
-		exits = width * 2 + height * 2 - 8
-	elif exits <= 0:
-		exits = 1
+	exits = _minmax(exits, 1, (width + height - 4) * 2)
 	
 	possible_cords = []
 	for y in range(1, height - 1):
@@ -41,19 +38,17 @@ def _get_random_exits(width: int, height: int, exits: int) -> set:
 		possible_cords.append((x, height - 1))
 	
 	finishes = set()
-	i = 0
-	while possible_cords and i < exits:
+	for i in range(exits):
+		if not possible_cords:
+			break
 		random_finish = random.randint(0, len(possible_cords) - 1)
 		finishes.add(possible_cords.pop(random_finish))
-		
-		i += 1
 	
 	return finishes
 
 
-def _generation_cycle(next_gen: list, priority_index: int, random_choice_chance: int, dead_end_chance: int,
-                      guaranteed_generations: int):
-	# Four different loops for optimisation, looks bad maybe refactor
+def _generation_cycle(next_gen: list, generation_function, priority_index: int, random_choice_chance: int,
+                      dead_end_chance: int, guaranteed_generations: int):
 	if random_choice_chance and dead_end_chance:
 		while next_gen:
 			if random.randint(1, 100) <= random_choice_chance:
@@ -63,32 +58,30 @@ def _generation_cycle(next_gen: list, priority_index: int, random_choice_chance:
 			
 			if guaranteed_generations > 0:
 				guaranteed_generations -= 1
-				next_gen.pop(chosen_index)()
 			elif random.randint(1, 100) <= dead_end_chance:
-				next_gen.pop(chosen_index)  # Just delete and not generate
-			else:
-				next_gen.pop(chosen_index)()
+				next_gen.pop(chosen_index)
+				continue
+			generation_function(*next_gen.pop(chosen_index))
 	elif random_choice_chance:
 		while next_gen:
 			if random.randint(1, 100) <= random_choice_chance:
-				next_gen.pop(random.randint(0, len(next_gen) - 1))()
+				generation_function(*next_gen.pop(random.randint(0, len(next_gen) - 1)))
 			else:
-				next_gen.pop(priority_index)()
+				generation_function(*next_gen.pop(priority_index))
 	elif dead_end_chance:
 		while next_gen:
 			if guaranteed_generations > 0:
 				guaranteed_generations -= 1
-				next_gen.pop(priority_index)()
 			elif random.randint(1, 100) <= dead_end_chance:
 				next_gen.pop(priority_index)
-			else:
-				next_gen.pop(priority_index)()
+				continue
+			generation_function(*next_gen.pop(priority_index))
 	else:
 		while next_gen:
-			next_gen.pop(priority_index)()
+			generation_function(*next_gen.pop(priority_index))
 
 
-def gen_end(field: list, field_width: int, field_height: int, endX: int, endY: int, startX: int, startY: int):
+def _gen_end(field: list, field_width: int, field_height: int, endX: int, endY: int, startX: int, startY: int):
 	"""
 	Connects an end to a generated maze
 	"""
@@ -118,7 +111,7 @@ def gen_end(field: list, field_width: int, field_height: int, endX: int, endY: i
 	angle = round(angle, 2)
 	if angle % 15 == 0:
 		angle += 1
-	spawn_path = generator_precise(endX, endY, angle, max_x=field_width, max_y=field_height)
+	spawn_path = _generator_precise(endX, endY, angle, max_x=field_width, max_y=field_height)
 	for x, y in spawn_path:
 		xx, yy = round(x), round(y)
 		if field[yy][xx] == 0:
@@ -128,9 +121,9 @@ def gen_end(field: list, field_width: int, field_height: int, endX: int, endY: i
 		field[yy][xx] = 0
 
 
-def generator_precise(x: int, y: int, angle: float,
-                      max_x: float = float("inf"), max_y: float = float("inf"), min_x: float = 0, min_y: float = 0,
-                      max_path_len: float = float("inf")) -> (float, float):
+def _generator_precise(x: int, y: int, angle: float,
+                       max_x: float = float("inf"), max_y: float = float("inf"), min_x: float = 0, min_y: float = 0,
+                       max_path_len: float = float("inf"), skip_path: bool = False) -> (float, float):
 	"""
 	Generator to go through a matrix at an angle
 	"""
@@ -172,7 +165,13 @@ def generator_precise(x: int, y: int, angle: float,
 	
 	total_steps = min(x_steps, y_steps, max_path_len)
 	
-	if angle % 45 == 0:
+	if skip_path:
+		x += delta_x * total_steps - (rounding_fix * next_x_step)
+		y += delta_y * total_steps - (rounding_fix * next_y_step)
+		yield x, y
+		return
+	
+	if angle % 45 == 0:  # I just copied simple gen
 		for _ in range(math.ceil(total_steps)):
 			yield x, y
 			x += delta_x
@@ -191,62 +190,69 @@ def generator_precise(x: int, y: int, angle: float,
 		else:
 			min_step = y_step
 			next_y += next_y_step
+		
 		x += delta_x * min_step
 		y += delta_y * min_step
 		step += min_step
 
 
-def generate_field_original_optimised(field_width: int, field_height: int, exits: int = 1) -> (list, int, int):
+def _iterator_between_points(x1, y1, x2, y2):
+	"""
+	Starts from (x1, y1) and ends on (x2, y2), includes both
+	"""
+	angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
+	distance = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+	yield from _generator_precise(x1, y1, angle, max_path_len=distance, max_x=float("inf"), max_y=float("inf"))
+
+
+def generate_field_original(field_width: int, field_height: int, exits: int = 1) -> (list, int, int):
 	"""
 	More blocky generation, has a lot of strange 1 block paths, kinda easy to predict on small sizes.
-	4.9s for 1024x1024
+	2.53s for 1024x1024
 	:return: A field, start X and Y.
 	"""
 	
-	def get_path(x, y, side) -> (int, int):
+	def check_path(x, y, side) -> (int, int):
+		# I hate a lot of if's but who cares if it's fast
+		# Basically checks all indexes colliding with next path index
 		if side == 'left':
-			ret_x, ret_y = x - 1, y
-			check_x = (-1, 0)
-			check_y = (-1, 1)
+			if field[y - 1][x] == 0 or field[y - 1][x - 1] == 0 or field[y][x - 1] == 0 or field[y + 1][x - 1] == 0 or \
+					field[y + 1][x] == 0:
+				return False
 		elif side == 'right':
-			ret_x, ret_y = x + 1, y
-			check_x = (0, 1)
-			check_y = (-1, 1)
+			if field[y - 1][x] == 0 or field[y + 1][x] == 0 or field[y + 1][x + 1] == 0 or field[y][x + 1] == 0 or \
+					field[y - 1][x + 1] == 0:
+				return False
 		elif side == 'up':
-			ret_x, ret_y = x, y - 1
-			check_x = (-1, 1)
-			check_y = (-1, 0)
+			if field[y - 1][x] == 0 or field[y - 1][x - 1] == 0 or field[y][x - 1] == 0 or field[y][x + 1] == 0 or \
+					field[y - 1][x + 1] == 0:
+				return False
 		elif side == 'down':
-			ret_x, ret_y = x, y + 1
-			check_x = (-1, 1)
-			check_y = (0, 1)
+			if field[y][x - 1] == 0 or field[y + 1][x - 1] == 0 or field[y + 1][x] == 0 or field[y + 1][x + 1] == 0 or \
+					field[y][x + 1] == 0:
+				return False
 		else:
 			return False
 		
-		if field[ret_y][ret_x] != 1:
-			return False
-		
-		for xd in range(check_x[0], check_x[1] + 1):
-			for yd in range(check_y[0], check_y[1] + 1):
-				if field[yd + ret_y][xd + ret_x] == 0:
-					return False
-		return ret_x, ret_y
+		return True
 	
-	def generate_path(pointX, pointY, *sides):
+	def generate_path(x, y, side):
 		nonlocal field, next_gen
 		
-		for side in sides:
-			pathcords = get_path(pointX, pointY, side)
-			if pathcords:
-				pathX, pathY = pathcords
-				field[pathY][pathX] = 0
-				next_gen.append(lambda: generate_path(pathX, pathY, 'left'))
-				next_gen.append(lambda: generate_path(pathX, pathY, 'right'))
-				next_gen.append(lambda: generate_path(pathX, pathY, 'up'))
-				next_gen.append(lambda: generate_path(pathX, pathY, 'down'))
+		if field[y][x] != 1 or not check_path(x, y, side):
+			return
+		
+		field[y][x] = 0
+		if field[y][x - 1] == 1 and (x - 1, y, 'left'):
+			next_gen.append((x - 1, y, 'left'))
+		if field[y][x + 1] == 1 and (x + 1, y, 'right'):
+			next_gen.append((x + 1, y, 'right'))
+		if field[y - 1][x] == 1 and (x, y - 1, 'up'):
+			next_gen.append((x, y - 1, 'up'))
+		if field[y + 1][x] == 1 and (x, y + 1, 'down'):
+			next_gen.append((x, y + 1, 'down'))
 	
 	field = _get_starting_box(field_width, field_height)
-	
 	startX, startY = random.randint(1, field_width - 2), random.randint(1, field_height - 2)
 	
 	finishes = _get_random_exits(field_width, field_height, exits)
@@ -256,14 +262,16 @@ def generate_field_original_optimised(field_width: int, field_height: int, exits
 		field[endY][endX] = 3
 	
 	# Generation
-	next_gen = [lambda: generate_path(startX, startY, 'down'), lambda: generate_path(startX, startY, 'left'),
-	            lambda: generate_path(startX, startY, 'right'), lambda: generate_path(startX, startY, 'up')]
+	next_gen = [(startX, startY + 1, 'down'), (startX - 1, startY, 'left'),
+	            (startX + 1, startY, 'right'), (startX, startY - 1, 'up')]
 	while next_gen:
-		index = random.randint(0, len(next_gen) - 1)
-		next_gen.pop(index)()
+		last_index = len(next_gen) - 1  # It should delete random index at O(1) but somehow it's slower than O(n)
+		random_index = random.randint(0, last_index)
+		next_gen[random_index], next_gen[last_index] = next_gen[last_index], next_gen[random_index]
+		generate_path(*next_gen.pop())
 	
 	for endX, endY in finishes:
-		gen_end(field, field_width, field_height, endX, endY, startX, startY)
+		_gen_end(field, field_width, field_height, endX, endY, startX, startY)
 	
 	# Change values for return
 	for y in range(field_height):
@@ -278,114 +286,18 @@ def generate_field_original_optimised(field_width: int, field_height: int, exits
 	return field, startX, startY
 
 
-def generate_field_original(fieldX: int, fieldY: int, exits: int = 1) -> (list, int, int):
-	"""
-	Squiggly generation, not that hard to predict, paths change direction a lot. Also kinda cool for strange sizes.
-	Very random generation speed, realistically O(n^3). 40s for 1024x1024
-	Works similarly to dfs.
-	:return: A field, start X and Y.
-	"""
-	
-	def get_path(x, y, side):
-		if side == 'left':
-			ret_x, ret_y = x - 1, y
-			check_x = (-1, 0)
-			check_y = (-1, 1)
-		elif side == 'right':
-			ret_x, ret_y = x + 1, y
-			check_x = (0, 1)
-			check_y = (-1, 1)
-		elif side == 'up':
-			ret_x, ret_y = x, y - 1
-			check_x = (-1, 1)
-			check_y = (-1, 0)
-		elif side == 'down':
-			ret_x, ret_y = x, y + 1
-			check_x = (-1, 1)
-			check_y = (0, 1)
-		else:
-			return False
-		
-		if field[ret_y][ret_x] != 1:
-			return False
-		
-		for xd in range(check_x[0], check_x[1] + 1):
-			for yd in range(check_y[0], check_y[1] + 1):
-				if field[yd + ret_y][xd + ret_x] == 0:
-					return False
-		return ret_x, ret_y
-	
-	def generate_path_new(pointX, pointY, *sides):
-		nonlocal field, next_gen
-		if 'all' in sides:
-			sides = ["left", "right", "up", "down"]
-		
-		random.shuffle(sides)
-		paths = []
-		for side in sides:
-			pathcords = get_path(pointX, pointY, side)
-			if pathcords:
-				pathX, pathY = pathcords
-				paths.append((pathX, pathY))
-		
-		# Dead ends are the ends that are dead
-		if not paths:
-			return
-		
-		for pathX, pathY in paths:
-			field[pathY][pathX] = 0
-			next_gen.insert(0, lambda: generate_path_new(pathX, pathY, 'all'))
-			break
-		next_gen.insert(0, lambda: generate_path_new(pointX, pointY, 'all'))
-	
-	field = _get_starting_box(fieldX, fieldY)
-	
-	startX, startY = random.randint(1, fieldX - 2), random.randint(1, fieldY - 2)
-	
-	finishes = _get_random_exits(fieldX, fieldY, exits)
-	
-	field[startY][startX] = 0
-	for endX, endY in finishes:
-		field[endY][endX] = 3
-	
-	next_gen = [lambda: generate_path_new(startX, startY, 'all')]
-	
-	shuffle_threshold = fieldY * fieldX // 10
-	while next_gen:
-		next_gen[0]()
-		next_gen.pop(0)
-		
-		if len(next_gen) > shuffle_threshold and random.randint(1, 20) == 1:
-			random.shuffle(next_gen)
-	
-	for endX, endY in finishes:
-		gen_end(field, fieldX, fieldY, endX, endY, startX, startY)
-	
-	# Just for return
-	for y in range(fieldY):
-		field[y][0] = 1
-		field[y][fieldX - 1] = 1
-	for x in range(fieldX):
-		field[0][x] = 1
-		field[fieldY - 1][x] = 1
-	for endX, endY in finishes:
-		field[endY][endX] = 2
-	
-	return field, startX, startY
-
-
 def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
                           weight_left: int = 1, weight_right: int = 1, weight_up: int = 1,
                           centered_spawn: bool = False, bfs: bool = False, random_node_chance: int = 0,
-                          dead_end_chance: int = 0, guaranteed_generations: int = 10) -> (list, int, int):
+                          dead_end_chance: int = 0, guaranteed_generations: int = 10,
+                          use_new_generator: bool = True) -> (list, int, int):
 	"""
-	Customisable, slower than generate_field_original_optimised, but can have a lot of variety.
-	5.5s for 1024x1024 (way slower with random nodes - 10s)
+	Customisable, slower than generate_field_original, but can have a lot of variety.
+	4s for 1024x1024 (slower with random nodes - 6s)
 	
 	Weights are relative to where we are generating - if left is the highest weight, the labyrinth will steer to the left.
-	There is no weight_down because we never generate down - it is backwards, and is always already used.
 	
-	:param exits: How many exits are there, will correct impossible values.
+	:param exits: How many exits labyrinth has.
 	:param weight_left: Generation will steer to the left, can generate in a spiral.
 	:param weight_right: Same but right.
 	:param weight_up: Generation will be more linear, can create very block generation.
@@ -396,69 +308,106 @@ def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
 	:param random_node_chance: What percentage of node generations should be chosen NOT on BFS or DFS but random.
 	:param dead_end_chance: Chance to not generate further at any point.
 	:param guaranteed_generations: How many generations will never be dead ends.
+	:param use_new_generator: False - use old generator inside, it uses weights differently.
 	:return: A field, start X and Y.
 	"""
 	
-	def get_path(x, y, side) -> (int, int):
-		if side == 'left':
-			ret_x, ret_y = x - 1, y
-			check_x = (-1, 0)
-			check_y = (-1, 1)
-		elif side == 'right':
-			ret_x, ret_y = x + 1, y
-			check_x = (0, 1)
-			check_y = (-1, 1)
-		elif side == 'up':
-			ret_x, ret_y = x, y - 1
-			check_x = (-1, 1)
-			check_y = (-1, 0)
-		elif side == 'down':
-			ret_x, ret_y = x, y + 1
-			check_x = (-1, 1)
-			check_y = (0, 1)
+	def check_path(x: int, y: int, side: int) -> (int, int):
+		# Looks sad as hell, but who cares if it's fast
+		# Basically checks all indexes colliding with next path x and y
+		if side == 0:
+			x -= 1
+			if field[y][x] != 1:
+				return
+			elif field[y - 1][x] == 0 or field[y - 1][x - 1] == 0 or field[y][x - 1] == 0 or field[y + 1][x - 1] == 0 or \
+					field[y + 1][x] == 0:
+				return
+		elif side == 2:
+			x += 1
+			if field[y][x] != 1:
+				return
+			elif field[y - 1][x] == 0 or field[y + 1][x] == 0 or field[y + 1][x + 1] == 0 or field[y][x + 1] == 0 or \
+					field[y - 1][x + 1] == 0:
+				return
+		elif side == 1:
+			y -= 1
+			if field[y][x] != 1:
+				return
+			elif field[y - 1][x] == 0 or field[y - 1][x - 1] == 0 or field[y][x - 1] == 0 or field[y][x + 1] == 0 or \
+					field[y - 1][x + 1] == 0:
+				return
+		elif side == 3:
+			y += 1
+			if field[y][x] != 1:
+				return
+			elif field[y][x - 1] == 0 or field[y + 1][x - 1] == 0 or field[y + 1][x] == 0 or field[y + 1][x + 1] == 0 or \
+					field[y][x + 1] == 0:
+				return
 		else:
-			return False
-		
-		if field[ret_y][ret_x] != 1:
-			return False
-		
-		for xd in range(check_x[0], check_x[1] + 1):
-			for yd in range(check_y[0], check_y[1] + 1):
-				if field[yd + ret_y][xd + ret_x] == 0:
-					return False
-		return ret_x, ret_y
+			return
+		return x, y
 	
-	def generate_path(pointX, pointY, *sides):
-		nonlocal field, next_gen
+	def generate_path_old(pointX, pointY, side):
+		pathcords = check_path(pointX, pointY, side)
 		
-		for side in sides:
-			pathcords = get_path(pointX, pointY, side)
+		if not pathcords:
+			return
+		pathX, pathY = pathcords
+		field[pathY][pathX] = 0
+		
+		# left - 0, up - 1, right - 2, down - 3
+		if side == 1:
+			relative_sides = [2, 1, 0]
+		elif side == 0:
+			relative_sides = [1, 0, 3]
+		elif side == 3:
+			relative_sides = [0, 3, 2]
+		else:
+			relative_sides = [3, 2, 1]
+		
+		randomised_sides = []
+		weights = [weight_right, weight_up, weight_left]
+		for _ in range(3):
+			index = random.choices(range(len(relative_sides)), weights, k=1)[0]
+			randomised_sides.append(relative_sides[index])
+			relative_sides.pop(index)
+			weights.pop(index)
+		
+		next_gen.append((pathX, pathY, randomised_sides[2]))
+		next_gen.append((pathX, pathY, randomised_sides[1]))
+		next_gen.append((pathX, pathY, randomised_sides[0]))
+	
+	def generate_path_new(pointX, pointY, side, randomised_sides=None):
+		if randomised_sides is None:  # Get new cords and check them
+			if side == 1:
+				relative_sides = [2, 1, 0]
+			elif side == 0:
+				relative_sides = [1, 0, 3]
+			elif side == 3:
+				relative_sides = [0, 3, 2]
+			else:
+				relative_sides = [3, 2, 1]
+			# left - 0, up - 1, right - 2, down - 3
 			
-			if pathcords:
-				# I deleted relative down, because it will always be already used - we came from there
-				if side == "up":
-					relative_sides = ["right", "up", "left"]
-				elif side == "left":
-					relative_sides = ["up", "left", "down"]
-				elif side == "down":
-					relative_sides = ["left", "down", "right"]
-				else:
-					relative_sides = ["down", "right", "up"]
-				
-				randomised_sides = []
-				weights = [weight_right, weight_up, weight_left]
-				for _ in range(3):
-					index = random.choices(range(len(relative_sides)), weights, k=1)[0]
-					randomised_sides.append(relative_sides[index])
-					relative_sides.pop(index)
-					weights.pop(index)
-				
-				pathX, pathY = pathcords
-				field[pathY][pathX] = 0
-				
-				next_gen.append(lambda: generate_path(pathX, pathY, randomised_sides[2]))
-				next_gen.append(lambda: generate_path(pathX, pathY, randomised_sides[1]))
-				next_gen.append(lambda: generate_path(pathX, pathY, randomised_sides[0]))
+			randomised_sides = []  # From the least priority to most priority
+			weights = [weight_right, weight_up, weight_left]
+			for _ in range(3):
+				index = random.choices(range(len(relative_sides)), weights, k=1)[0]
+				randomised_sides.append(relative_sides[index])
+				relative_sides.pop(index)
+				weights.pop(index)
+		
+		while randomised_sides:
+			rand_side = randomised_sides.pop()
+			next_path_cords = check_path(pointX, pointY, rand_side)
+			if not next_path_cords:
+				continue
+			next_x, next_y = next_path_cords
+			field[next_y][next_x] = 0
+			
+			next_gen.append((pointX, pointY, side, randomised_sides))
+			next_gen.append((next_x, next_y, rand_side))
+			return
 	
 	field = _get_starting_box(field_width, field_height)
 	
@@ -474,19 +423,26 @@ def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
 		field[endY][endX] = 3
 	
 	# Generation
-	next_gen = [lambda: generate_path(startX, startY, 'left'), lambda: generate_path(startX, startY, 'up'),
-	            lambda: generate_path(startX, startY, 'right'), lambda: generate_path(startX, startY, 'down')]
+	# all sides are value coded:
+	# left - 0, up - 1, right - 2, down - 3, same as indexes in field_checks
+	next_gen = [(startX, startY, 0), (startX, startY, 1), (startX, startY, 2), (startX, startY, 3)]
+	random.shuffle(next_gen)
 	
 	if bfs:
 		priority_index = 0
 	else:
 		priority_index = -1
 	
-	next_gen.pop(random.randint(0, 3))()
-	_generation_cycle(next_gen, priority_index, random_node_chance, dead_end_chance, guaranteed_generations)
+	if use_new_generator:
+		path_generator = generate_path_new
+	else:
+		path_generator = generate_path_old
+	
+	_generation_cycle(next_gen, path_generator, priority_index, random_node_chance,
+	                  dead_end_chance, guaranteed_generations)
 	
 	for endX, endY in finishes:
-		gen_end(field, field_width, field_height, endX, endY, startX, startY)
+		_gen_end(field, field_width, field_height, endX, endY, startX, startY)
 	
 	# Change values for return
 	for y in range(field_height):
@@ -501,90 +457,40 @@ def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
 	return field, startX, startY
 
 
-def generate_spiral(field_width: int, field_height: int, exits: int = 1,
-                    steer_strength: int = 500, forward_strength: int = 100, centered_spawn: bool = False,
-                    random_node_percentage: int = 5):
-	"""Specific configuration of weighted generation, labyrinth will look like a spiral.
-	:param steer_strength: How strong should a spiral steer to a side, in percentage
-	:param forward_strength: The higher this value is - the more blocky an algorithm will be.
-	:param centered_spawn: If we should always start from a center.
-	:param random_node_percentage: How often a random node will be chosen, help in creating more branches.
-	"""
-	if random.randint(0, 1):
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=centered_spawn,
-		                             weight_up=forward_strength, weight_right=steer_strength, weight_left=100,
-		                             random_node_chance=random_node_percentage)
-	else:
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=centered_spawn,
-		                             weight_up=forward_strength, weight_left=steer_strength, weight_right=100,
-		                             random_node_chance=random_node_percentage)
-
-
-def generate_spiral_long(field_width: int, field_height: int, exits: int = 1):
-	"""Specific configuration of weighted generation, labyrinth will look like a defined spiral with long corridors."""
-	if random.randint(0, 1):
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=False,
-		                             weight_up=1000, weight_right=1000, weight_left=1)
-	else:
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=False,
-		                             weight_up=1000, weight_left=1000, weight_right=1)
-
-
-def generate_corridors_long(field_width: int, field_height: int, exits: int = 1):
-	"""Specific configuration of weighted generation, labyrinth will look like a defined spiral with long corridors."""
-	if random.randint(0, 1):
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=False,
-		                             weight_up=100, weight_right=1, weight_left=1, random_node_chance=10)
-	else:
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=False,
-		                             weight_up=100, weight_left=1, weight_right=1, random_node_chance=10)
-
-
-def generate_corridors_small(field_width: int, field_height: int, exits: int = 1):
-	"""Specific configuration of weighted generation, labyrinth will look like a defined spiral with long corridors."""
-	if random.randint(0, 1):
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=False,
-		                             weight_up=100, weight_right=1, weight_left=1, random_node_chance=40)
-	else:
-		return generate_field_custom(field_width, field_height, exits, centered_spawn=False,
-		                             weight_up=100, weight_left=1, weight_right=1, random_node_chance=40)
-
-
-def generate_diagonal(field_width: int, field_height: int, exits: int = 1, steer_strength: int = 500,
-                      centered_spawn: bool = False, random_node_percentage: int = 20):
-	"""Specific configuration of weighted generation.
-	High steer strength will make labyrinth more diagonal, low steer strength will make it more horizontal (try 10)
-	:param steer_strength: How strong should a spiral steer to a side, in percentage
-	:param centered_spawn: If we should always start from a center.
-	:param random_node_percentage: How often a random node will be chosen, help in creating more branches.
-	"""
-	return generate_field_custom(field_width, field_height, exits, centered_spawn=centered_spawn,
-	                             weight_up=100, weight_right=steer_strength, weight_left=steer_strength,
-	                             random_node_chance=random_node_percentage)
-
-
 def generate_field_vector(field_width: int, field_height: int,
                           wall_width: int = 1, path_width: int = 1,
                           max_path_len: float = float("inf"), min_path_len: float = 1,
-                          check_angle_step: int = 90, ignore_tiles_radius: int = 3,
+                          turn_angle_step: int = 30, ignore_tiles_radius: int = 3,
                           exits: int = 1, centered_spawn: bool = False, bfs: bool = False,
-                          random_choice_chance: int = 0,
-                          dead_end_chance: int = 0, guaranteed_generations: int = 10) -> (list, int, int):
+                          random_choice_chance: int = 0, dead_end_chance: int = 0, guaranteed_generations: int = 10,
+                          reverse: bool = False) -> (list, int, int):
 	"""
-	O(n^2), 5.6s for 128x128; 26s for 256x256
+	Generates a maze by choosing a point, and shooting a path in a random direction.
+	Very slow, but can look fun.
+	16s for 256x256, but varies a lot
+	:param wall_width: How many walls between paths at minimum.
+	:param path_width: Makes paths wider.
+	:param max_path_len: Makes generation less linear.
+	:param min_path_len: Makes generation more blocky.
+	:param turn_angle_step: Optimisation feature, if more, generator considers less angles for path generation.
+	:param ignore_tiles_radius: When choosing a path, generator must ignore the closest tiles, otherwise it will
+	consider itself as another path.
 	:param exits: How many exits are there, will correct impossible values.
 	:param centered_spawn: No random spawn location - always at a field center.
 	:param bfs: True - BFS generation, False - DFS
 	DFS generates faster, generates from last generated nodes, generally leads to 1 long path and few branches.
 	BFS generates from first nodes, mostly creates same fields.
 	:param random_choice_chance: What percentage of node generations should be chosen NOT on BFS or DFS but random.
+	:param dead_end_chance: A chance to not generate a path.
+	:param guaranteed_generations: How many generations will not roll a dead_end_chance.
+	:param reverse: If true, it reverses  walls and paths.
 	:return: A field, start X and Y.
 	"""
 	
 	def check_angle(x, y, angle, ignore_tiles: set = None) -> bool:
 		"""
-		Changes given ignore_tiles
-		:return: If we touch another path in front
+		Changes inputted ignore_tiles
+		:return: If there is another path in a radius of wall_width
 		"""
 		
 		if ignore_tiles is None:
@@ -593,9 +499,10 @@ def generate_field_vector(field_width: int, field_height: int,
 		ignore_tiles.add((round(x), round(y)))
 		
 		# We iterate over all angles clockwise in a circle, to check if there are already other paths
-		# within wall_width, which would be too close (wall_width)
-		for check_angle in range(angle - 90, angle + 90, 5):
-			path = generator_precise(x, y, check_angle, field_width, field_height, 1, 1, max_path_len=wall_width + 1)
+		# within wall_width, which would be too close
+		for check_angle in range(angle - 90, angle + 90, check_angle_step):
+			path = _generator_precise(x, y, check_angle, field_width, field_height, 1, 1,
+			                          max_path_len=wall_width + path_width)
 			for float_check_x, float_check_y in path:
 				check_x, check_y = round(float_check_x), round(float_check_y)
 				
@@ -617,17 +524,12 @@ def generate_field_vector(field_width: int, field_height: int,
 		
 		# Checking an angle if it can become a path
 		# So we iterate over all indexes that would be that path
-		for float_x, float_y in generator_precise(check_x, check_y, angle, field_width, field_height, 0, 0,
-		                                          max_path_len=max_path_len):
+		for float_x, float_y in _generator_precise(check_x, check_y, angle, field_width, field_height, 0, 0,
+		                                           max_path_len=min_path_len):
 			if not check_angle(float_x, float_y, angle, ignore_tiles):
 				continue
-			
-			wall_len = math.sqrt((check_x - float_x) ** 2 + (check_y - float_y) ** 2)
-			
-			if wall_len >= min_path_len:
-				return True
-			else:
-				return False
+			return False
+		
 		return True
 	
 	def generate_path(start_x, start_y, ignore_tiles: set = None):
@@ -646,7 +548,7 @@ def generate_field_vector(field_width: int, field_height: int,
 		possible_angles = [[0, None]]
 		group = 0
 		# Finding possible angles to generate
-		for angle in range(0, 360, check_angle_step):
+		for angle in range(0, 360, turn_angle_step):
 			if check_path_by_angle(start_x, start_y, angle, ignore_tiles_close):
 				if possible_angles[group][1] is None:
 					possible_angles[group][0] = angle
@@ -674,25 +576,37 @@ def generate_field_vector(field_width: int, field_height: int,
 		
 		new_ignore_tiles = set()
 		new_ignore_tiles.add((start_x, start_y))
-		current_path_len = 0
-		# Generating a wall at chosen angle
-		for float_x, float_y in generator_precise(start_x, start_y, chosen_angle, field_width, field_height, 1, 1,
-		                                          max_path_len=max_path_len):
-			x, y = round(float_x), round(float_y)
-			ignore_tiles_close.add((x, y))
+		subpath_len = 0
+		
+		additional_tiles = {(0, 0)}
+		if path_width > 1:
+			for add_x, add_y in _generator_precise(start_x, start_y, chosen_angle + 90, field_width, field_height, 1, 1,
+			                                       path_width // 2):
+				additional_tiles.add((start_x - round(add_x), start_y - round(add_y)))
+			for add_x, add_y in _generator_precise(start_x, start_y, chosen_angle - 90, field_width, field_height, 1, 1,
+			                                       (path_width + 1) // 2):
+				additional_tiles.add((start_x - round(add_x), start_y - round(add_y)))
+		
+		# Generating a path at chosen angle
+		for float_x, float_y in _generator_precise(start_x, start_y, chosen_angle, field_width, field_height, 1, 1,
+		                                           max_path_len=max_path_len):
+			orig_x, orig_y = round(float_x), round(float_y)
+			ignore_tiles_close.add((orig_x, orig_y))
 			
 			if check_angle(float_x, float_y, chosen_angle, ignore_tiles_close):
 				break
 			
-			new_ignore_tiles.add((x, y))
-			
-			if field[y][x] == 1:
-				field[y][x] = 0
+			for add_x, add_y in additional_tiles:
+				path_x, path_y = orig_x + add_x, orig_y + add_y
+				new_ignore_tiles.add((path_x, path_y))
+				ignore_tiles_close.add((path_x, path_y))
 				
-				if current_path_len > wall_width:
-					next_gen.append(lambda cx=x, cy=y: generate_path(cx, cy, new_ignore_tiles))
-					current_path_len -= wall_width
-			current_path_len += 1
+				if field[path_y][path_x] == 1:
+					field[path_y][path_x] = 0
+					if subpath_len > wall_width:  # It creates a new path every wall_width cuz it cannot be closer
+						next_gen.append((path_x, path_y, new_ignore_tiles))
+						subpath_len -= wall_width
+			subpath_len += 1
 	
 	field = _get_starting_box(field_width, field_height)
 	
@@ -708,6 +622,8 @@ def generate_field_vector(field_width: int, field_height: int,
 	
 	path_width = _minmax(path_width, 1, field_width - wall_width)
 	wall_width = _minmax(wall_width, 1, field_width - path_width)
+	check_angle_step = int(360 / (wall_width + 1) / 20) + 1
+	ignore_tiles_radius += wall_width  # Maybe I shouldn't do that, but it's annoying to change
 	
 	# Generation
 	next_gen = []
@@ -718,10 +634,55 @@ def generate_field_vector(field_width: int, field_height: int,
 		priority_index = -1
 	generate_path(startX, startY)  # Calls first generation here because there is a chance to not generate later
 	
-	_generation_cycle(next_gen, priority_index, random_choice_chance, dead_end_chance, guaranteed_generations)
+	_generation_cycle(next_gen, generate_path, priority_index, random_choice_chance, dead_end_chance,
+	                  guaranteed_generations)
+	
+	# After generation
+	if reverse:
+		# Walls will become paths, but these paths will not be connected, so I connect all walls in 1 new maze
+		# connected_walls = []
+		# for y, row in enumerate(field):
+		# 	for x, tile in enumerate(row):
+		# 		if tile == 1:
+		# 			if connected_walls:
+		# 				last_x, last_y = random.choice(connected_walls)
+		# 				dest_x, dest_y = x, y
+		# 				for dest_x, dest_y in _generator_between_points(last_x, last_y, x, y):
+		# 					rx, ry = round(dest_x), round(dest_y)
+		# 					path_tile = field[ry][rx]
+		# 					if path_tile == 99:
+		# 						last_x, last_y = rx, ry
+		# 					elif path_tile == 1:
+		# 						break
+		#
+		# 				dest_x, dest_y = round(dest_x), round(dest_y)
+		# 				for step_x, step_y in _generator_between_points(last_x, last_y, dest_x, dest_y):
+		# 					rx, ry = round(step_x), round(step_y)
+		# 					if field[ry][rx] == 0:
+		# 						field[ry][rx] = 99
+		# 						connected_walls.append((rx, ry))
+		#
+		# 			this_room = set()
+		# 			adjacent_walls = [(x, y)]
+		# 			while adjacent_walls:
+		# 				adjx, adjy = adjacent_walls.pop()
+		# 				if field[adjy][adjx] == 1:
+		# 					this_room.add((adjx, adjy))
+		# 					field[adjy][adjx] = 99
+		# 					adjacent_walls.extend(((x + 1, y), (x - 1, y), (x, y - 1), (x, y + 1)))
+		# 			connected_walls.extend(this_room)
+		# TODO: Yeah commenting code is bad, but now even debug is dying by itself, so nah, not finishing
+		# but now, when you reverse, the mazes are impossible, oh no
+		
+		for y, row in enumerate(field):
+			for x, tile in enumerate(row):
+				if tile == 1:
+					field[y][x] = 0
+				elif tile == 0:
+					field[y][x] = 1
 	
 	for endX, endY in finishes:
-		gen_end(field, field_width, field_height, endX, endY, startX, startY)
+		_gen_end(field, field_width, field_height, endX, endY, startX, startY)
 	
 	# Change values for return
 	for y in range(field_height):
@@ -740,32 +701,20 @@ def generate_field_vector(field_width: int, field_height: int,
 if __name__ == '__main__':
 	import time
 	
-	tries = 100
-	size = 4
-	while size < 1000:
-		size *= 2
+	random.seed(213498790134278)
+	
+	tries = 10
+	size = 2 ** 2
+	while size <= 2 ** 7:
 		width = height = size
 		times = []
 		for _ in range(tries):
 			s = time.time()
-			# generate_field_chaos(width, height, wall_width=2, path_width=1, min_path_len=3, check_angle_step=15,
-			#                      centered_spawn=True)
-			# generate_field_chaos(width, height, dead_end_chance=50, random_choice_chance=50)
-			generate_field_custom(width, height, dead_end_chance=100, random_node_chance=100)
-			times.append(time.time() - s)
+			generate_field_custom(size, size)
+			s = time.time() - s
+			times.append(s)
 		
 		print(size, times)
-		print(sum(times) / len(times))
+		print(min(times), sum(times) / len(times), max(times))
 		print()
-
-# TODO: aChaos generator still isn't complete and doesn't use wall and path width correctly
-# same with other parameters
-# TODO: use numpy to make labyrinths faster ? both here and in main.py
-# another optimisation - commands are stored in a list, it is O(n) for deletetion for random indexes, change it for self balancing binary tree ?
-# (test)
-
-# reversed chaos (just generate a chaos, then reverse walls and empty tiles, you will (probably) get a lot of unconnected rooms
-# just go through an array, when you see this room - connect it randomly with any already connected room.
-
-# instead of centered_spawn make it just a (spawn_x, spawn_y), so you can choose
-# add an ability to go diagonally ? and change the game, obviously
+		size *= 2
