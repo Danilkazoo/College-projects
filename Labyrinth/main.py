@@ -328,7 +328,7 @@ def main_menu():
 		labyrinth("Customisable", lambda: generators.generate_field_custom(field_size, field_size, weight_up=100,
 		                                                                   random_node_chance=40,
 		                                                                   use_new_generator=False),
-		          "Slower than optimised", "5.5s for 1024x1024", "11 parameters",
+		          "Slower than optimised", "5.5s for 1024x1024", "13 parameters",
 		          click_command=lambda: select_menu._open(customisable_submenu)),
 		labyrinth("Vector based",
 		          lambda: generators.generate_field_vector(field_size, field_size, random_choice_chance=100,

@@ -190,12 +190,15 @@ def customisable_labyrinth_submenu(menu_width, menu_height, on_close, on_back, o
 		dead_end_chance = int(dead_end_entry.get_value())
 		guaranteed_generations = int(guaranteed_entry.get_value())
 		use_new_generator = new_gen_switch.get_value()
+		cons = int(cons_entry.get_value())
+		half_steps = half_steps_switch.get_value()
 		
 		try:
 			field, spawn_x, spawn_y = generators.generate_field_custom(width, height, exits, l_weight, r_weight,
 			                                                           mid_weight, centered_spawn, bfs,
 			                                                           random_node_chance, dead_end_chance,
-			                                                           guaranteed_generations, use_new_generator)
+			                                                           guaranteed_generations, use_new_generator, cons,
+			                                                           half_steps)
 		except ValueError:
 			preview.fill((255, 0, 0))
 			preview.blit(_text, _text_rect)
@@ -304,6 +307,24 @@ def customisable_labyrinth_submenu(menu_width, menu_height, on_close, on_back, o
 	                                                width=350, value_format=lambda x: str(round(x)))
 	configure_entry_range_pair(guaranteed_entry, guaranteed_range, guaranteed_frame, 0, 1000, draw_preview)
 	second_row.update_position()
+	
+	third_row = custom_menu.add.frame_h(menu_width - 50, 160)
+	third_row.update_position()
+	
+	cons_frame = third_row.pack(custom_menu.add.frame_v(500, _pair_frame_height),
+	                            align=pygame_menu.locals.ALIGN_CENTER)
+	cons_entry = custom_menu.add.text_input('Cons: ', default=1, input_type="input-int",
+	                                        align=pygame_menu.locals.ALIGN_RIGHT)
+	cons_range = custom_menu.add.range_slider('', default=1, range_values=(0, 9), increment=1,
+	                                          width=300, value_format=lambda x: str(round(x)))
+	configure_entry_range_pair(cons_entry, cons_range, cons_frame, 0, 9, draw_preview)
+	third_row.update_position()
+	
+	half_steps_switch = custom_menu.add.toggle_switch('', default=False,
+	                                                  state_text=("No half-steps", "Allow half-steps"),
+	                                                  width=250, onchange=lambda _: draw_preview())
+	third_row.pack(half_steps_switch)
+	third_row.update_position()
 	
 	# Buttons
 	custom_menu.add.vertical_margin(20)

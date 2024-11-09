@@ -290,7 +290,8 @@ def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
                           weight_left: int = 1, weight_right: int = 1, weight_up: int = 1,
                           centered_spawn: bool = False, bfs: bool = False, random_node_chance: int = 0,
                           dead_end_chance: int = 0, guaranteed_generations: int = 10,
-                          use_new_generator: bool = True) -> (list, int, int):
+                          use_new_generator: bool = True,
+                          consecutive_steps: int = 1, allow_half_steps: bool = False) -> (list, int, int):
 	"""
 	Customisable, slower than generate_field_original, but can have a lot of variety.
 	4s for 1024x1024 (slower with random nodes - 6s)
@@ -309,6 +310,8 @@ def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
 	:param dead_end_chance: Chance to not generate further at any point.
 	:param guaranteed_generations: How many generations will never be dead ends.
 	:param use_new_generator: False - use old generator inside, it uses weights differently.
+	:param consecutive_steps: When generating a tile, how many steps in that direction to do.
+	:param allow_half_steps: When generating more than 1 step, convert walls to path, or not
 	:return: A field, start X and Y.
 	"""
 	
@@ -377,7 +380,7 @@ def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
 		next_gen.append((pathX, pathY, randomised_sides[1]))
 		next_gen.append((pathX, pathY, randomised_sides[0]))
 	
-	def generate_path_new(pointX, pointY, side, randomised_sides=None):
+	def generate_path_new(pointX, pointY, side, randomised_sides=None, steps_left=consecutive_steps) -> bool:
 		if randomised_sides is None:  # Get new cords and check them
 			if side == 1:
 				relative_sides = [2, 1, 0]
@@ -403,11 +406,19 @@ def generate_field_custom(field_width: int, field_height: int, exits: int = 1,
 			if not next_path_cords:
 				continue
 			next_x, next_y = next_path_cords
-			field[next_y][next_x] = 0
 			
-			next_gen.append((pointX, pointY, side, randomised_sides))
+			if randomised_sides:  # If it is the starting step, save other sides
+				next_gen.append((pointX, pointY, side, randomised_sides.copy()))
+			
+			if steps_left > 1:
+				full_steps = generate_path_new(next_x, next_y, side, [rand_side], steps_left - 1)
+				if allow_half_steps or full_steps:
+					field[next_y][next_x] = 0
+				return full_steps
+			
+			field[next_y][next_x] = 0
 			next_gen.append((next_x, next_y, rand_side))
-			return
+			return True
 	
 	field = _get_starting_box(field_width, field_height)
 	
@@ -694,6 +705,177 @@ def generate_field_vector(field_width: int, field_height: int,
 	for endX, endY in finishes:
 		field[endY][endX] = 2
 	field[startY][startX] = 0
+	
+	return field, startX, startY
+
+
+def generate_field_kruskal(field_width: int, field_height: int, exits: int = 1,
+                           weight_left: int = 1, weight_right: int = 1, weight_up: int = 1,
+                           centered_spawn: bool = False, bfs: bool = False, random_node_chance: int = 0,
+                           dead_end_chance: int = 0, guaranteed_generations: int = 10,
+                           use_new_generator: bool = True) -> (list, int, int):
+	"""
+	Customisable, slower than generate_field_original, but can have a lot of variety.
+	4s for 1024x1024 (slower with random nodes - 6s)
+
+	Weights are relative to where we are generating - if left is the highest weight, the labyrinth will steer to the left.
+
+	:param exits: How many exits labyrinth has.
+	:param weight_left: Generation will steer to the left, can generate in a spiral.
+	:param weight_right: Same but right.
+	:param weight_up: Generation will be more linear, can create very block generation.
+	:param centered_spawn: No random spawn location - always at a field center.
+	:param bfs: True - BFS generation, False - DFS
+	DFS generates faster, generates from last generated nodes, generally leads to 1 long path and few branches.
+	BFS generates from first nodes, mostly creates same fields.
+	:param random_node_chance: What percentage of node generations should be chosen NOT on BFS or DFS but random.
+	:param dead_end_chance: Chance to not generate further at any point.
+	:param guaranteed_generations: How many generations will never be dead ends.
+	:param use_new_generator: False - use old generator inside, it uses weights differently.
+	:return: A field, start X and Y.
+	"""
+	
+	def check_path(x: int, y: int, side: int) -> (int, int):
+		# Looks sad as hell, but who cares if it's fast
+		# Basically checks all indexes colliding with next path x and y
+		if side == 0:
+			x -= 1
+			if field[y][x] != 1:
+				return
+			elif field[y - 1][x] == 0 or field[y - 1][x - 1] == 0 or field[y][x - 1] == 0 or field[y + 1][x - 1] == 0 or \
+					field[y + 1][x] == 0:
+				return
+		elif side == 2:
+			x += 1
+			if field[y][x] != 1:
+				return
+			elif field[y - 1][x] == 0 or field[y + 1][x] == 0 or field[y + 1][x + 1] == 0 or field[y][x + 1] == 0 or \
+					field[y - 1][x + 1] == 0:
+				return
+		elif side == 1:
+			y -= 1
+			if field[y][x] != 1:
+				return
+			elif field[y - 1][x] == 0 or field[y - 1][x - 1] == 0 or field[y][x - 1] == 0 or field[y][x + 1] == 0 or \
+					field[y - 1][x + 1] == 0:
+				return
+		elif side == 3:
+			y += 1
+			if field[y][x] != 1:
+				return
+			elif field[y][x - 1] == 0 or field[y + 1][x - 1] == 0 or field[y + 1][x] == 0 or field[y + 1][x + 1] == 0 or \
+					field[y][x + 1] == 0:
+				return
+		else:
+			return
+		return x, y
+	
+	def generate_path_old(pointX, pointY, side):
+		pathcords = check_path(pointX, pointY, side)
+		
+		if not pathcords:
+			return
+		pathX, pathY = pathcords
+		field[pathY][pathX] = 0
+		
+		# left - 0, up - 1, right - 2, down - 3
+		if side == 1:
+			relative_sides = [2, 1, 0]
+		elif side == 0:
+			relative_sides = [1, 0, 3]
+		elif side == 3:
+			relative_sides = [0, 3, 2]
+		else:
+			relative_sides = [3, 2, 1]
+		
+		randomised_sides = []
+		weights = [weight_right, weight_up, weight_left]
+		for _ in range(3):
+			index = random.choices(range(len(relative_sides)), weights, k=1)[0]
+			randomised_sides.append(relative_sides[index])
+			relative_sides.pop(index)
+			weights.pop(index)
+		
+		next_gen.append((pathX, pathY, randomised_sides[2]))
+		next_gen.append((pathX, pathY, randomised_sides[1]))
+		next_gen.append((pathX, pathY, randomised_sides[0]))
+	
+	def generate_path_new(pointX, pointY, side, randomised_sides=None):
+		if randomised_sides is None:  # Get new cords and check them
+			if side == 1:
+				relative_sides = [2, 1, 0]
+			elif side == 0:
+				relative_sides = [1, 0, 3]
+			elif side == 3:
+				relative_sides = [0, 3, 2]
+			else:
+				relative_sides = [3, 2, 1]
+			# left - 0, up - 1, right - 2, down - 3
+			
+			randomised_sides = []  # From the least priority to most priority
+			weights = [weight_right, weight_up, weight_left]
+			for _ in range(3):
+				index = random.choices(range(len(relative_sides)), weights, k=1)[0]
+				randomised_sides.append(relative_sides[index])
+				relative_sides.pop(index)
+				weights.pop(index)
+		
+		while randomised_sides:
+			rand_side = randomised_sides.pop()
+			next_path_cords = check_path(pointX, pointY, rand_side)
+			if not next_path_cords:
+				continue
+			next_x, next_y = next_path_cords
+			field[next_y][next_x] = 0
+			
+			next_gen.append((pointX, pointY, side, randomised_sides))
+			next_gen.append((next_x, next_y, rand_side))
+			return
+	
+	field = _get_starting_box(field_width, field_height)
+	
+	if centered_spawn:
+		startX, startY = field_width // 2, field_height // 2
+	else:
+		startX, startY = random.randint(1, field_width - 2), random.randint(1, field_height - 2)
+	
+	finishes = _get_random_exits(field_width, field_height, exits)
+	
+	field[startY][startX] = 0
+	for endX, endY in finishes:
+		field[endY][endX] = 3
+	
+	# Generation
+	# all sides are value coded:
+	# left - 0, up - 1, right - 2, down - 3, same as indexes in field_checks
+	next_gen = [(startX, startY, 0), (startX, startY, 1), (startX, startY, 2), (startX, startY, 3)]
+	random.shuffle(next_gen)
+	
+	if bfs:
+		priority_index = 0
+	else:
+		priority_index = -1
+	
+	if use_new_generator:
+		path_generator = generate_path_new
+	else:
+		path_generator = generate_path_old
+	
+	_generation_cycle(next_gen, path_generator, priority_index, random_node_chance,
+	                  dead_end_chance, guaranteed_generations)
+	
+	for endX, endY in finishes:
+		_gen_end(field, field_width, field_height, endX, endY, startX, startY)
+	
+	# Change values for return
+	for y in range(field_height):
+		field[y][0] = 1
+		field[y][field_width - 1] = 1
+	for x in range(field_width):
+		field[0][x] = 1
+		field[field_height - 1][x] = 1
+	for endX, endY in finishes:
+		field[endY][endX] = 2
 	
 	return field, startX, startY
 
