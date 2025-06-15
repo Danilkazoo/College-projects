@@ -1,0 +1,7 @@
+{
+  "board_width": 4,
+  "board_height": 4,
+  "tile_size": 200,
+  "offset_coef": 0.05,
+  "border_size": 20
+}

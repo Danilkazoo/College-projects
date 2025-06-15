@@ -1,19 +1,39 @@
 import random
 import pygame
+import json
+import sys
 
 pygame.init()
 pygame.display.set_caption('Holo is top')
 
 # Customise here
-imagename = "Example_Image.jpg"  # What image to use in a game
+try:
+	with open("settings.json", "x") as f:
+		f.write("""{
+		"board_width": 4,
+		"board_height": 4,
+		"tile_size": 200,
+		"offset_coef": 0.05,
+		"border_size": 20\n}""")
+except FileExistsError:
+	pass
 
-# HOW MANY CUTS (we have a great knife)
-# How many tiles in a field (default 4x4) (doesn't work properly with unequal sides)
-Board_Width = Board_Height = 4
-tile_size = 200  # Automatically resizes if it doesn't fit
-offset_coef = 0.05  # Offset between tiles will be size * coefficient
-border_size = 20
-# Customise here
+with open("settings.json", "r+") as f:
+	settings = json.load(f)
+	
+	# HOW MANY CUTS (we have a great knife)
+	# How many tiles in a field (default 4x4) (doesn't work properly with unequal sides)
+	Board_Width = settings.get("board_width")
+	Board_Height = settings.get("board_height")
+	tile_size = settings.get("tile_size")  # Automatically resizes if it doesn't fit
+	offset_coef = settings.get("offset_coef")  # Offset between tiles will be size * coefficient
+	border_size = settings.get("border_size")
+
+sysargs = sys.argv
+if len(sysargs) > 1:
+	imagename = sysargs[1]  # What image to use in a game
+else:
+	imagename = "Example_Image.jpg"  # Default
 
 tile_offset = int(tile_size * offset_coef)
 total_board_width = tile_size * Board_Width + tile_offset * (Board_Width - 1) + border_size * 2
